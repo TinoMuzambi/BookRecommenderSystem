@@ -104,3 +104,84 @@ We observe a large number of zero ratings. This can be attributed to the fact th
 We will now begin building our recommendation system. We will start by building a user-based collaborative filtering system. We will then build an item-based collaborative filtering system. Finally, we will build a matrix factorisation system.
 
 ## User-Based Collaborative Filtering
+```{r}
+# Function to calculate similarity between users
+calculate.user.similarity <- function(user1, user2) {
+  common.books <- intersect(user1$ISBN, user2$ISBN)
+  if (length(common.books) == 0) return(0)
+  
+  ratings1 <- user1$Book.Rating[user1$ISBN %in% common.books]
+  ratings2 <- user2$Book.Rating[user2$ISBN %in% common.books]
+  
+  return(cor(ratings1, ratings2, use = "complete.obs"))
+}
+```
+
+```{r}
+# Function to get top N similar users
+get.top.similar.users <- function(target.user, all.users, n = 5) {
+  similarities <- sapply(all.users, function(user) {
+    calculate.user.similarity(target.user, user)
+  })
+  
+  top.users <- head(sort(similarities, decreasing = TRUE), n)
+  return(top.users)
+}
+```
+
+```{r}
+# Function to predict rating for a book
+predict.rating <- function(target.user, book.isbn, similar.users, all.users) {
+  weighted.sum <- 0
+  similarity.sum <- 0
+  
+  for (user.id in names(similar.users)) {
+    user <- all.users[[user.id]]
+    similarity <- similar.users[user.id]
+    
+    if (book.isbn %in% user$ISBN) {
+      rating <- user$Book.Rating[user$ISBN == book.isbn]
+      weighted.sum <- weighted.sum + similarity * rating
+      similarity.sum <- similarity.sum + similarity
+    }
+  }
+  
+  if (similarity.sum == 0) return(NA)
+  
+  predicted.rating <- weighted.sum / similarity.sum
+  return(predicted.rating)
+}
+```
+
+```{r}
+# Main function for user-based collaborative filtering
+user.based.cf <- function(comb.ratings, target.user.id, n.similar.users = 5) {
+  # Split data by user
+  users.list <- split(comb.ratings, comb.ratings$User.ID)
+  
+  # Get target user
+  target.user <- users.list[[as.character(target.user.id)]]
+  
+  # Find similar users
+  similar.users <- get.top.similar.users(target.user, users.list, n.similar.users)
+  
+  # Predict ratings for books not rated by target user
+  all.books <- unique(comb.ratings$ISBN)
+  target.user.books <- target.user$ISBN
+  books.to.predict <- setdiff(all.books, target.user.books)
+  
+  predictions <- sapply(books.to.predict, function(book) {
+    predict.rating(target.user, book, similar.users, users.list)
+  })
+  
+  # Create a data frame with predictions
+  recommendations <- data.frame(
+    ISBN = books.to.predict,
+    Predicted.Rating = predictions
+  )
+  
+  recommendations <- recommendations[order(recommendations$Predicted.Rating, decreasing = TRUE), ]
+  return(recommendations)
+}
+```
+
