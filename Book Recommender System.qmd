@@ -25,9 +25,10 @@ install.if.missing("tidyverse")
 ```
 
 # The Data
+
 The data we will be working with is a partially preprocessed version of the ”Book-Crossing” dataset. The data can be downloaded [here](https://www.kaggle.com/datasets/arashnic/book-recommendation-dataset/) from Kaggle. It was collected by Cai-Nicolas Ziegler in a 4-week crawl (August / September 2004) from the Book-Crossing community with kind permission from Ron Hornbaker, CTO of Humankind Systems. It contains 278 858 users (anonymised but with demographic information) providing 1 149 780 ratings (explicit / implicit) about 271 379 books.
 
-```{r, echo=FALSE}
+```{r}
 # Load the data
 ratings <- read.csv("data/Ratings.csv")
 books <- read.csv("data/Books.csv")
@@ -39,13 +40,64 @@ head(users)
 ```
 
 # Data Preprocessing
-Before we can merge the data, for performance reasons, we will only use the top 10 000 users and the top 10 000 books. We will then merge the data into a single dataframe.
+
+Before we can merge the data, for performance reasons, we will only sample 10 000 ratings. We will then merge the data into a single dataframe.
 ```{r}
+# Sample 10 000 ratings
+set.seed(50731)
+ratings <- ratings[sample(nrow(ratings), 10000),]
+
 # Merge the data
 comb.ratings <- ratings %>% 
-  filter(User.ID %in% users$User.ID[1:10000] & ISBN %in% books$ISBN[1:10000]) %>% 
   left_join(books, by = "ISBN") %>% 
   left_join(users, by = "User.ID")
-head(comb.ratings)
 ```
+
+
+
+Explore the structure of the combined data.
+
+```{r}
+str(comb.ratings)
+
+summary(comb.ratings)
+```
+
+Looking at the data, we identify some cleaning that needs to be done. We will do the following to clean up the data:
+
+-   Remove the columns that we do not need
+
+-   Replace ages less than 13 and greater than 100 with NA
+
+-   Convert the data types of the columns to the appropriate types
+
+-   Replace year of publication with NA where it is before 1900
+
+```{r}
+# Perform data cleaning
+comb.ratings <- comb.ratings %>% 
+  select(-c("Image.URL.S", "Image.URL.M", "Image.URL.L")) %>% 
+  mutate(Age = ifelse(Age < 13 | Age > 100, NA, Age)) %>% 
+  mutate(Year.Of.Publication = as.numeric(Year.Of.Publication)) %>% 
+  mutate(Year.Of.Publication = ifelse(Year.Of.Publication < 1900, NA, Year.Of.Publication))
+
+summary(comb.ratings)
+```
+
+# Exploratory Data Analysis
+We will now perform some exploratory data analysis to understand the data better.
+
+```{r}
+# Plot the distribution of ratings, age and year of publication faceted
+comb.ratings %>% 
+  gather(key = "key", value = "value", Book.Rating, Age, Year.Of.Publication) %>% 
+  ggplot(aes(x = value)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+  labs(title = "Distribution of Key Variables", x = "Value", y = "Count") +
+  facet_wrap(~key, scales = "free") +
+  theme_minimal() + 
+  theme(plot.title = element_text(hjust = 0.5))
+```
+We observe a large number of zero ratings. This can be attributed to the fact that a majority of the users posting reviews are doing so because they had a bad experience. Alternatively the users, or the site the data is derived from, could be configured to automatically input a 0 for the book rating. This is something we will need to consider when building our recommendation system.
+
 
