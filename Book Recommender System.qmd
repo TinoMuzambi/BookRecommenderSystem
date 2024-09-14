@@ -100,4 +100,15 @@ comb.ratings %>%
 ```
 We observe a large number of zero ratings. This can be attributed to the fact that a majority of the users posting reviews are doing so because they had a bad experience. Alternatively the users, or the site the data is derived from, could be configured to automatically input a 0 for the book rating. This is something we will need to consider when building our recommendation system.
 
+# Recommendation Systems
+We will now begin building our recommendation system. We will start by building a user-based collaborative filtering system. We will then build an item-based collaborative filtering system. Finally, we will build a matrix factorisation system.
 
+## User-Based Collaborative Filtering
+We will start by building a user-based collaborative filtering system. We will first create a user-book matrix and then calculate the similarity between users. We will then use the similarity to make recommendations.
+```{r}
+# Create a user-item matrix
+user.book.matrix <- comb.ratings %>% 
+  select(User.ID, ISBN, Book.Rating) %>% 
+  spread(key = ISBN, value = Book.Rating)
+head(user.book.matrix)
+```
