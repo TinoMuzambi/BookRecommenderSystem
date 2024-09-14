@@ -27,7 +27,7 @@ install.if.missing("tidyverse")
 # The Data
 The data we will be working with is a partially preprocessed version of the ”Book-Crossing” dataset. The data can be downloaded [here](https://www.kaggle.com/datasets/arashnic/book-recommendation-dataset/) from Kaggle. It was collected by Cai-Nicolas Ziegler in a 4-week crawl (August / September 2004) from the Book-Crossing community with kind permission from Ron Hornbaker, CTO of Humankind Systems. It contains 278 858 users (anonymised but with demographic information) providing 1 149 780 ratings (explicit / implicit) about 271 379 books.
 
-```{r}
+```{r, echo=FALSE}
 # Load the data
 ratings <- read.csv("data/Ratings.csv")
 books <- read.csv("data/Books.csv")
@@ -38,4 +38,14 @@ head(books)
 head(users)
 ```
 
+# Data Preprocessing
+Before we can merge the data, for performance reasons, we will only use the top 10 000 users and the top 10 000 books. We will then merge the data into a single dataframe.
+```{r}
+# Merge the data
+comb.ratings <- ratings %>% 
+  filter(User.ID %in% users$User.ID[1:10000] & ISBN %in% books$ISBN[1:10000]) %>% 
+  left_join(books, by = "ISBN") %>% 
+  left_join(users, by = "User.ID")
+head(comb.ratings)
+```
 
