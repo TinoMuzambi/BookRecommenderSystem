@@ -1,11 +1,18 @@
 ---
 title: "Book Recommender System"
 author: "Tino Muzambi"
-format: html
-editor: source
+format: 
+  html:
+    embed-resources: true
+    page-layout: full
+    toc: true
 ---
 
-```{r}
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries, include=FALSE}
 # Libraries
 install.if.missing <- function(package.name) {
   if (!require(package.name, character.only = TRUE)) {
@@ -18,7 +25,7 @@ install.if.missing("tidyverse")
 ```
 
 # The Data
-The data we will be working with is a partially preprocessed version of the ”Book-Crossing” dataset. The data can be downloaded [here](https://www.kaggle.com/datasets/arashnic/book-recommendation-dataset/) from Kaggle. It was collected by Cai-Nicolas Ziegler in a 4-week crawl (August / September 2004) from the Book-Crossing community with kind permission from Ron Hornbaker, CTO of Humankind Systems. It contains 278,858 users (anonymized but with demographic information) providing 1,149,780 ratings (explicit / implicit) about 271,379 books.
+The data we will be working with is a partially preprocessed version of the ”Book-Crossing” dataset. The data can be downloaded [here](https://www.kaggle.com/datasets/arashnic/book-recommendation-dataset/) from Kaggle. It was collected by Cai-Nicolas Ziegler in a 4-week crawl (August / September 2004) from the Book-Crossing community with kind permission from Ron Hornbaker, CTO of Humankind Systems. It contains 278 858 users (anonymised but with demographic information) providing 1 149 780 ratings (explicit / implicit) about 271 379 books.
 
 ```{r}
 # Load the data
