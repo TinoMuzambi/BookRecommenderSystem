@@ -47,6 +47,7 @@ We will merge the data into a single dataframe then perform various functions to
 comb.ratings <- ratings %>% 
   left_join(books, by = "ISBN") %>% 
   left_join(users, by = "User.ID")
+rm(ratings, books, users)
 ```
 
 Explore the structure of the combined data.
@@ -72,13 +73,14 @@ Looking at the data, we identify some cleaning that needs to be done. We will do
 ```{r}
 # Perform data cleaning
 comb.ratings <- comb.ratings %>% 
-  select(-c("Image.URL.S", "Image.URL.M", "Image.URL.L")) %>% 
+  select(c("User.ID", "ISBN", "Book.Rating", "Year.Of.Publication", "Age")) %>% 
   mutate(Age = ifelse(Age < 13 | Age > 100, NA, Age)) %>% 
   mutate(Year.Of.Publication = ifelse(Year.Of.Publication < 1900, NA, Year.Of.Publication)) %>% 
   mutate(Year.Of.Publication = as.numeric(Year.Of.Publication)) %>% 
   drop_na()
 summary(comb.ratings)
 ```
+
 Preprocess the data to remove users with less than 5 ratings and books with less than 5 ratings
 ```{r}
 preprocess.data <- function(ratings, min.ratings = 5) {
@@ -95,15 +97,6 @@ preprocess.data <- function(ratings, min.ratings = 5) {
 }
 ```
 
-Let's preprocess the data and then take a sample of 50 000 ratings for computational efficiency.
-```{r}
-comb.ratings <- preprocess.data(comb.ratings)
-
-# Sample 50 000 ratings
-set.seed(50731)
-comb.ratings <- comb.ratings[sample(nrow(comb.ratings), 50000),]
-```
-
 # Exploratory Data Analysis
 We will now perform some exploratory data analysis to understand the data better.
 
@@ -118,11 +111,70 @@ comb.ratings %>%
   theme_minimal() + 
   theme(plot.title = element_text(hjust = 0.5))
 ```
-We observe a large number of zero ratings. This can be attributed to the fact that a majority of the users posting reviews are doing so because they had a bad experience. Alternatively the users, or the site the data is derived from, could be configured to automatically input a 0 for the book rating. This is something we will need to consider when building our recommendation system.
+We observe a large number of zero ratings. This can be attributed to the fact that a majority of the users posting reviews are doing so because they had a bad experience. Alternatively the users, or the site the data is derived from, could be configured to automatically input a 0 for the book rating. Before building the recommendation system, we will only keep the columns we need for the analysis. We will also then take a sample of 50 000 ratings for computational efficiency.
+```{r}
+comb.ratings <- preprocess.data(comb.ratings)
+
+# Select the columns we need
+comb.ratings <- comb.ratings %>% 
+  select(User.ID, ISBN, Book.Rating)
+
+# Sample 50 000 ratings
+set.seed(50731)
+comb.ratings <- comb.ratings[sample(nrow(comb.ratings), 50000),]
+```
 
 # Recommendation Systems
 We will now begin building our recommendation system. We will start by building a user-based collaborative filtering system. We will then build an item-based collaborative filtering system. Finally, we will build a matrix factorisation system.
 
 ## User-Based Collaborative Filtering
+We will start by building a user-based collaborative filtering system. We will first create a user-item matrix then calculate the cosine similarity between users. We will then use the similarity matrix to predict the ratings for the books.
+```{r}
+cosine.similarity <- function(user1, user2) {
+  max.len <- max(length(user1), length(user2))
+  user1.padded <- c(user1, rep(0, max.len - length(user1)))
+  user2.padded <- c(user2, rep(0, max.len - length(user2)))
+  similarity <- sum(user1.padded * user2.padded) / (sqrt(sum(user1.padded^2)) * sqrt(sum(user2.padded^2)))
+  return(similarity)
+}
+```
 
+```{r}
+predict.rating.ubcf <- function(user.id, isbn, k = 10) {
+  # browser()
+  # Find k most similar users
+  neighbors <- comb.ratings[comb.ratings$User.ID != user.id, ]
+  similarities <- sapply(neighbors$User.ID, function(x) cosine.similarity(user.id, x))
+  nearest.neighbors <- neighbors[order(similarities, decreasing = TRUE)[1:k], ]
+  
+  # Calculate weighted average rating from neighbors
+  weighted.ratings <- nearest.neighbors$Book.Rating * similarities[order(similarities, decreasing = TRUE)[1:k]]
+  predicted.rating <- sum(weighted.ratings) / sum(similarities[order(similarities, decreasing = TRUE)[1:k]])
+  
+  return(predicted.rating)
+}
+```
+
+Let's make some predictions using the user-based collaborative filtering system and calculate the RMSE.
+```{r}
+rmse <- function() {
+# Split data into training and testing sets
+set.seed(123)
+train.index <- sample(1:nrow(comb.ratings), 0.8 * nrow(comb.ratings))
+train.data <- comb.ratings[train.index, ]
+test.data <- comb.ratings[-train.index, ]
+
+# browser()
+# Make predictions on the test set
+test.data$predicted.rating <- sapply(1:nrow(test.data), function(i) {
+  user.id <- test.data$User.ID[i]
+  isbn <- test.data$ISBN[i]
+  predict.rating.ubcf(user.id, isbn)
+})
+
+# Calculate RMSE
+rmse <- sqrt(mean((test.data$Book.Rating - test.data$predicted.rating)^2))
+print(paste("RMSE:", rmse))
+}
+```
 
