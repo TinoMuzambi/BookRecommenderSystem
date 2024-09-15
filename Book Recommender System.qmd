@@ -121,7 +121,7 @@ comb.ratings <- comb.ratings %>%
 
 # Sample 50 000 ratings
 set.seed(50731)
-comb.ratings <- comb.ratings[sample(nrow(comb.ratings), 50000),]
+comb.ratings <- comb.ratings[sample(nrow(comb.ratings), 35000),]
 ```
 
 # Recommendation Systems
