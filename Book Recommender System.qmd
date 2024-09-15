@@ -41,19 +41,13 @@ head(users)
 
 # Data Preprocessing
 
-Before we can merge the data, for performance reasons, we will only sample 10 000 ratings. We will then merge the data into a single dataframe.
+We will merge the data into a single dataframe then perform various functions to reduce the number of observations for computational efficiency. We will also perform some data cleaning.
 ```{r}
-# Sample 10 000 ratings
-set.seed(50731)
-ratings <- ratings[sample(nrow(ratings), 10000),]
-
 # Merge the data
 comb.ratings <- ratings %>% 
   left_join(books, by = "ISBN") %>% 
   left_join(users, by = "User.ID")
 ```
-
-
 
 Explore the structure of the combined data.
 
@@ -73,15 +67,41 @@ Looking at the data, we identify some cleaning that needs to be done. We will do
 
 -   Replace year of publication with NA where it is before 1900
 
+-   Remove any rows with missing values
+
 ```{r}
 # Perform data cleaning
 comb.ratings <- comb.ratings %>% 
   select(-c("Image.URL.S", "Image.URL.M", "Image.URL.L")) %>% 
   mutate(Age = ifelse(Age < 13 | Age > 100, NA, Age)) %>% 
+  mutate(Year.Of.Publication = ifelse(Year.Of.Publication < 1900, NA, Year.Of.Publication)) %>% 
   mutate(Year.Of.Publication = as.numeric(Year.Of.Publication)) %>% 
-  mutate(Year.Of.Publication = ifelse(Year.Of.Publication < 1900, NA, Year.Of.Publication))
-
+  drop_na()
 summary(comb.ratings)
+```
+Preprocess the data to remove users with less than 5 ratings and books with less than 5 ratings
+```{r}
+preprocess.data <- function(ratings, min.ratings = 5) {
+  user.counts <- table(ratings$User.ID)
+  valid.users <- names(user.counts[user.counts >= min.ratings])
+  
+  filtered.ratings <- ratings %>%
+    filter(User.ID %in% valid.users) %>%
+    group_by(ISBN) %>%
+    filter(n() >= min.ratings) %>%
+    ungroup()
+  
+  return(filtered.ratings)
+}
+```
+
+Let's preprocess the data and then take a sample of 50 000 ratings for computational efficiency.
+```{r}
+comb.ratings <- preprocess.data(comb.ratings)
+
+# Sample 50 000 ratings
+set.seed(50731)
+comb.ratings <- comb.ratings[sample(nrow(comb.ratings), 50000),]
 ```
 
 # Exploratory Data Analysis
@@ -104,84 +124,5 @@ We observe a large number of zero ratings. This can be attributed to the fact th
 We will now begin building our recommendation system. We will start by building a user-based collaborative filtering system. We will then build an item-based collaborative filtering system. Finally, we will build a matrix factorisation system.
 
 ## User-Based Collaborative Filtering
-```{r}
-# Function to calculate similarity between users
-calculate.user.similarity <- function(user1, user2) {
-  common.books <- intersect(user1$ISBN, user2$ISBN)
-  if (length(common.books) == 0) return(0)
-  
-  ratings1 <- user1$Book.Rating[user1$ISBN %in% common.books]
-  ratings2 <- user2$Book.Rating[user2$ISBN %in% common.books]
-  
-  return(cor(ratings1, ratings2, use = "complete.obs"))
-}
-```
 
-```{r}
-# Function to get top N similar users
-get.top.similar.users <- function(target.user, all.users, n = 5) {
-  similarities <- sapply(all.users, function(user) {
-    calculate.user.similarity(target.user, user)
-  })
-  
-  top.users <- head(sort(similarities, decreasing = TRUE), n)
-  return(top.users)
-}
-```
-
-```{r}
-# Function to predict rating for a book
-predict.rating <- function(target.user, book.isbn, similar.users, all.users) {
-  weighted.sum <- 0
-  similarity.sum <- 0
-  
-  for (user.id in names(similar.users)) {
-    user <- all.users[[user.id]]
-    similarity <- similar.users[user.id]
-    
-    if (book.isbn %in% user$ISBN) {
-      rating <- user$Book.Rating[user$ISBN == book.isbn]
-      weighted.sum <- weighted.sum + similarity * rating
-      similarity.sum <- similarity.sum + similarity
-    }
-  }
-  
-  if (similarity.sum == 0) return(NA)
-  
-  predicted.rating <- weighted.sum / similarity.sum
-  return(predicted.rating)
-}
-```
-
-```{r}
-# Main function for user-based collaborative filtering
-user.based.cf <- function(comb.ratings, target.user.id, n.similar.users = 5) {
-  # Split data by user
-  users.list <- split(comb.ratings, comb.ratings$User.ID)
-  
-  # Get target user
-  target.user <- users.list[[as.character(target.user.id)]]
-  
-  # Find similar users
-  similar.users <- get.top.similar.users(target.user, users.list, n.similar.users)
-  
-  # Predict ratings for books not rated by target user
-  all.books <- unique(comb.ratings$ISBN)
-  target.user.books <- target.user$ISBN
-  books.to.predict <- setdiff(all.books, target.user.books)
-  
-  predictions <- sapply(books.to.predict, function(book) {
-    predict.rating(target.user, book, similar.users, users.list)
-  })
-  
-  # Create a data frame with predictions
-  recommendations <- data.frame(
-    ISBN = books.to.predict,
-    Predicted.Rating = predictions
-  )
-  
-  recommendations <- recommendations[order(recommendations$Predicted.Rating, decreasing = TRUE), ]
-  return(recommendations)
-}
-```
 
