@@ -131,7 +131,6 @@ We will now begin building our recommendation system. We will start by building 
 We will start by building a user-based collaborative filtering system. We will first create a user-item matrix then calculate the cosine similarity between users. We will then use the similarity matrix to predict the ratings for the books.
 ```{r}
 cosine.similarity <- function(user1, user2) {
-  browser()
   max.len <- max(length(user1), length(user2))
   user1.padded <- c(user1, rep(0, max.len - length(user1)))
   user2.padded <- c(user2, rep(0, max.len - length(user2)))
@@ -183,6 +182,35 @@ predict.rating.ibcf <- function(user.id, isbn, k = 10) {
   
   return(predicted.rating)
 }
+```
+
+## Matrix Factorisation
+We will now build a matrix factorisation system. We will first create a user-item matrix then factorise the matrix using singular value decomposition. We will then use the factorised matrix to predict the ratings for the books.
+```{r}
+predict.rating.mf <- function(user.id, isbn) {
+  # Create user-item matrix
+  user.item.matrix <- comb.ratings %>% 
+    spread(key = ISBN, value = Book.Rating) %>% 
+    column_to_rownames(var = "User.ID")
+  
+  # Factorise the matrix
+  svd.matrix <- svd(user.item.matrix)
+  u <- svd.matrix$u
+  d <- diag(svd.matrix$d)
+  v <- svd.matrix$v
+  
+  # Predict the rating
+  predicted.rating <- u[user.id, ] %*% d %*% v[, isbn]
+  
+  return(predicted.rating)
+}
+```
+
+Let's do some predictions
+```{r}
+predict.rating.ubcf(155141, "059035342X")
+predict.rating.ibcf(155141, "059035342X")
+predict.rating.mf(155141, "059035342X")
 ```
 
 
