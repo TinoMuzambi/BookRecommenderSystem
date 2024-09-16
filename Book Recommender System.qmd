@@ -141,7 +141,6 @@ cosine.similarity <- function(user1, user2) {
 
 ```{r}
 predict.rating.ubcf <- function(user.id, isbn, k = 10) {
-  # browser()
   # Find k most similar users
   neighbors <- comb.ratings[comb.ratings$User.ID != user.id, ]
   similarities <- sapply(neighbors$User.ID, function(x) cosine.similarity(user.id, x))
@@ -157,14 +156,12 @@ predict.rating.ubcf <- function(user.id, isbn, k = 10) {
 
 Let's make some predictions using the user-based collaborative filtering system and calculate the RMSE.
 ```{r}
-rmse <- function() {
 # Split data into training and testing sets
 set.seed(123)
 train.index <- sample(1:nrow(comb.ratings), 0.8 * nrow(comb.ratings))
 train.data <- comb.ratings[train.index, ]
 test.data <- comb.ratings[-train.index, ]
 
-# browser()
 # Make predictions on the test set
 test.data$predicted.rating <- sapply(1:nrow(test.data), function(i) {
   user.id <- test.data$User.ID[i]
@@ -175,6 +172,5 @@ test.data$predicted.rating <- sapply(1:nrow(test.data), function(i) {
 # Calculate RMSE
 rmse <- sqrt(mean((test.data$Book.Rating - test.data$predicted.rating)^2))
 print(paste("RMSE:", rmse))
-}
 ```
 
