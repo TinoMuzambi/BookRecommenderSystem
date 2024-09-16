@@ -131,6 +131,7 @@ We will now begin building our recommendation system. We will start by building 
 We will start by building a user-based collaborative filtering system. We will first create a user-item matrix then calculate the cosine similarity between users. We will then use the similarity matrix to predict the ratings for the books.
 ```{r}
 cosine.similarity <- function(user1, user2) {
+  browser()
   max.len <- max(length(user1), length(user2))
   user1.padded <- c(user1, rep(0, max.len - length(user1)))
   user2.padded <- c(user2, rep(0, max.len - length(user2)))
@@ -154,23 +155,52 @@ predict.rating.ubcf <- function(user.id, isbn, k = 10) {
 }
 ```
 
-Let's make some predictions using the user-based collaborative filtering system and calculate the RMSE.
+## Item-Based Collaborative Filtering
+We will now build an item-based collaborative filtering system. We will first create an item-user matrix then calculate the cosine similarity between items. We will then use the similarity matrix to predict the ratings for the books.
+
+First, we need a cosine similarity function for items.
 ```{r}
-# Split data into training and testing sets
-set.seed(123)
-train.index <- sample(1:nrow(comb.ratings), 0.8 * nrow(comb.ratings))
-train.data <- comb.ratings[train.index, ]
-test.data <- comb.ratings[-train.index, ]
-
-# Make predictions on the test set
-test.data$predicted.rating <- sapply(1:nrow(test.data), function(i) {
-  user.id <- test.data$User.ID[i]
-  isbn <- test.data$ISBN[i]
-  predict.rating.ubcf(user.id, isbn)
-})
-
-# Calculate RMSE
-rmse <- sqrt(mean((test.data$Book.Rating - test.data$predicted.rating)^2))
-print(paste("RMSE:", rmse))
+cosine.similarity.items <- function(item1, item2) {
+  max.len <- max(length(item1), length(item2))
+  item1.padded <- c(item1, rep(0, max.len - length(item1)))
+  item2.padded <- c(item2, rep(0, max.len - length(item2)))
+  similarity <- sum(item1.padded * item2.padded) / (sqrt(sum(item1.padded^2)) * sqrt(sum(item2.padded^2)))
+  return(similarity)
+}
 ```
 
+Next, we need a function to predict the ratings for items.
+```{r}
+predict.rating.ibcf <- function(user.id, isbn, k = 10) {
+  # Find k most similar items
+  neighbors <- comb.ratings[comb.ratings$ISBN != isbn, ]
+  similarities <- sapply(neighbors$ISBN, function(x) cosine.similarity.items(comb.ratings[comb.ratings$ISBN == isbn, ]$Book.Rating, comb.ratings[comb.ratings$ISBN == x, ]$Book.Rating))
+  nearest.neighbors <- neighbors[order(similarities, decreasing = TRUE)[1:k], ]
+  
+  # Calculate weighted average rating from neighbors
+  weighted.ratings <- nearest.neighbors$Book.Rating * similarities[order(similarities, decreasing = TRUE)[1:k]]
+  predicted.rating <- sum(weighted.ratings) / sum(similarities[order(similarities, decreasing = TRUE)[1:k]])
+  
+  return(predicted.rating)
+}
+```
+
+
+```{r}
+# Split data into training and testing sets
+# set.seed(123)
+# train.index <- sample(1:nrow(comb.ratings), 0.8 * nrow(comb.ratings))
+# train.data <- comb.ratings[train.index, ]
+# test.data <- comb.ratings[-train.index, ]
+# 
+# # Make predictions on the test set
+# test.data$predicted.rating <- sapply(1:nrow(test.data), function(i) {
+#   user.id <- test.data$User.ID[i]
+#   isbn <- test.data$ISBN[i]
+#   predict.rating.ubcf(user.id, isbn)
+# })
+# 
+# # Calculate RMSE
+# rmse <- sqrt(mean((test.data$Book.Rating - test.data$predicted.rating)^2))
+# print(paste("RMSE:", rmse))
+```
