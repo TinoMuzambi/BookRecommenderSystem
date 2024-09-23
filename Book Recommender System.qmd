@@ -26,7 +26,7 @@ install.if.missing("tidyverse")
 
 # The Data
 
-The data we will be working with is a partially preprocessed version of the ”Book-Crossing” dataset. The data can be downloaded [here](https://www.kaggle.com/datasets/arashnic/book-recommendation-dataset/) from Kaggle. It was collected by Cai-Nicolas Ziegler in a 4-week crawl (August / September 2004) from the Book-Crossing community with kind permission from Ron Hornbaker, CTO of Humankind Systems. It contains 278 858 users (anonymised but with demographic information) providing 1 149 780 ratings (explicit / implicit) about 271 379 books.
+The data we will be working with is a partially preprocessed version of the ”Book-Crossing” dataset. The data can be downloaded [here](https://www.kaggle.com/datasets/arashnic/book-recommendation-dataset/) from Kaggle. It was collected by Cai-Nicolas Ziegler in a 4-week crawl (August / September 2004) from the Book-Crossing community with kind permission from Ron Hornbaker, CTO of Humankind Systems. It contains 278 858 users (anonymised but with demographic information) providing 1 149 780 ratings (explicit/implicit) about 271 379 books.
 
 ```{r}
 # Load the data
@@ -39,7 +39,7 @@ head(books)
 head(users)
 ```
 
-# Data Preprocessing
+# Data Pre-processing
 
 We will merge the data into a single dataframe then perform various functions to reduce the number of observations for computational efficiency. We will also perform some data cleaning.
 ```{r}
@@ -119,7 +119,7 @@ comb.ratings <- preprocess.data(comb.ratings)
 comb.ratings <- comb.ratings %>% 
   select(User.ID, ISBN, Book.Rating)
 
-# Sample 50 000 ratings
+# Sample 35 000 ratings
 set.seed(50731)
 comb.ratings <- comb.ratings[sample(nrow(comb.ratings), 35000),]
 ```
