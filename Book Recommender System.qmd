@@ -58,7 +58,7 @@ book.ids <- data.frame(ISBN = unique(comb.ratings$ISBN), new.book.id = 0:(length
 comb.ratings <- comb.ratings %>% 
   left_join(user.ids) %>% 
   left_join(book.ids) %>% 
-  select(User.ID = new.user.id, ISBN = new.book.id, Book.Rating, Year.Of.Publication, Age)
+  select(User.ID = new.user.id, ISBN = new.book.id, Book.Rating, Year.Of.Publication, Age, Book.Title)
 ```
 
 Explore the structure of the combined data.
@@ -127,7 +127,7 @@ comb.ratings <- preprocess.data(comb.ratings)
 
 # Select the columns we need
 comb.ratings <- comb.ratings %>% 
-  select(User.ID, ISBN, Book.Rating)
+  select(User.ID, ISBN, Book.Rating, Book.Title)
 
 # Sample 35 000 ratings
 set.seed(50731)
@@ -195,34 +195,71 @@ predict.rating.ibcf <- function(user.id, isbn, k = 10) {
 ```
 
 ## Matrix Factorisation
-We will now build a matrix factorisation system using recosystem. 
+We will now build a matrix factorisation system using recosystem. We will first allocate training and test splits. We will then set up the model and make predictions on the test set.
 ```{r}
+# Create test/train split.
+test.data <- comb.ratings %>% 
+  group_by(User.ID) %>%
+  slice_sample(prop = 0.2) %>%
+  ungroup()
+train.data <- comb.ratings %>% 
+  anti_join(test.data, by = c("User.ID", "ISBN"))
+```
 
+```{r}
+# Set up the Recosystem params.
+reco.train <- data_memory(
+  user_index = train.data$User.ID,
+  item_index = train.data$ISBN,
+  rating = train.data$Book.Rating
+)
+
+reco.test <- data_memory(
+  user_index = test.data$User.ID,
+  item_index = test.data$ISBN,
+  rating = test.data$Book.Rating
+)
+```
+
+```{r}
+# Set up the model.
+rs <- Reco()
+
+rs$train(reco.train, opts = list(
+  dim = 10,
+  nmf = T,
+  niter = 50,
+  verbose = F
+))
+```
+
+```{r}
+# Hyperparameter tuning
+opts <- rs$tune(reco.train, opts = list(
+  dim = c(50, 75, 100),
+  lrate = c(0.001, 0.005, 0.01),
+  niter = 20,
+  nmf = T,
+  nthread = 4
+))
+opts
+```
+
+```{r}
+# Retrain the model with the optimal hyperparameters
+rs$train(reco.train, opts = opts)
 ```
 
 Let's do some predictions
 ```{r}
-predict.rating.ubcf(59494, "059035342X")
-predict.rating.ibcf(59494, "059035342X")
-predict.rating.mf(59494, "059035342X")
+predict.rating.ubcf(59494, 616)
+predict.rating.ibcf(59494, 616)
+mf.predict <- rs$predict(reco.test)
 ```
 
-
+We will now evaluate the accuracy of the matrix factorisation model using RMSE.
 ```{r}
-# Split data into training and testing sets
-# set.seed(123)
-# train.index <- sample(1:nrow(comb.ratings), 0.8 * nrow(comb.ratings))
-# train.data <- comb.ratings[train.index, ]
-# test.data <- comb.ratings[-train.index, ]
-# 
-# # Make predictions on the test set
-# test.data$predicted.rating <- sapply(1:nrow(test.data), function(i) {
-#   user.id <- test.data$User.ID[i]
-#   isbn <- test.data$ISBN[i]
-#   predict.rating.ubcf(user.id, isbn)
-# })
-# 
-# # Calculate RMSE
-# rmse <- sqrt(mean((test.data$Book.Rating - test.data$predicted.rating)^2))
-# print(paste("RMSE:", rmse))
+# Calculate RMSE
+sqrt(mean((mf.predict - test.data$Book.Rating)^2))
 ```
+
