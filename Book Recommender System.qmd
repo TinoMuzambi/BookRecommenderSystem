@@ -266,10 +266,24 @@ We will now evaluate the accuracy of the matrix factorisation model using RMSE.
 sqrt(mean((mf.predict - test.data$Book.Rating)^2))
 ```
 
+Apply regularisation to the matrix factorisation model.
+```{r}
+rs$train(reco.train, opts = list(
+  dim = 10,
+  nmf = T,
+  niter = 50,
+  verbose = F,
+  lambda = 0.01
+))
+
+mf.predict <- rs$predict(reco.test)
+sqrt(mean((mf.predict - test.data$Book.Rating)^2))
+```
+
+
 We will now create an ensemble model that combines the user-based collaborative filtering, item-based collaborative filtering, and matrix factorisation models. We will then evaluate the accuracy of the ensemble model using RMSE.
 ```{r}
 ensemble.predict <- function(user.id, isbn) {
-  browser()
   ubcf.prediction <- predict.rating.ubcf(user.id, isbn)
   ibcf.prediction <- predict.rating.ibcf(user.id, isbn)
   mf.prediction <- rs$predict(data_memory(user_index = user.id, item_index = isbn))
