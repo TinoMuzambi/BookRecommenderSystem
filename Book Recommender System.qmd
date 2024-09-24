@@ -295,7 +295,7 @@ ensemble.predict <- function(user.id, isbn) {
 ```{r}
 ensemble.predict(59494, 616)
 
-ensemble.predictions <- mapply(ensemble.predict, test.data$User.ID[1:10], test.data$ISBN[1:10])
-sqrt(mean((ensemble.predictions - test.data$Book.Rating[1:10])^2))
+# ensemble.predictions <- mapply(ensemble.predict, test.data$User.ID[1:10], test.data$ISBN[1:10])
+# sqrt(mean((ensemble.predictions - test.data$Book.Rating[1:10])^2))
 ```
 
