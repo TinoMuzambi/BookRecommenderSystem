@@ -143,55 +143,97 @@ We will now begin building our recommendation system. We will start by building 
 ## User-Based Collaborative Filtering
 We will start by building a user-based collaborative filtering system. We will first create a user-item matrix then calculate the cosine similarity between users. We will then use the similarity matrix to predict the ratings for the books.
 ```{r}
-cosine.similarity <- function(user1, user2) {
-  max.len <- max(length(user1), length(user2))
-  user1.padded <- c(user1, rep(0, max.len - length(user1)))
-  user2.padded <- c(user2, rep(0, max.len - length(user2)))
-  similarity <- sum(user1.padded * user2.padded) / (sqrt(sum(user1.padded^2)) * sqrt(sum(user2.padded^2)))
+create.ratings.matrix <- function(ratings.data) {
+  ratings.matrix <- ratings.data %>%
+    select(User.ID, ISBN, Book.Rating) %>%
+    pivot_wider(names_from = ISBN, values_from = Book.Rating) %>%
+    column_to_rownames(var = "User.ID")
+  
+  return(as.matrix(ratings.matrix))
+}
+```
+
+
+```{r}
+cosine.similarity <- function(vector1, vector2) {
+  # Filter out NA values
+  vector1 <- vector1[!is.na(vector1)]
+  vector2 <- vector2[!is.na(vector2)]
+  
+  # Find common items
+  common.items <- intersect(names(vector1), names(vector2))
+  
+  # If there are no common items, return 0 (no similarity)
+  if (length(common.items) == 0) return(0)
+  
+  # Subset both vectors to only include common items
+  vector1 <- vector1[common.items]
+  vector2 <- vector2[common.items]
+  
+  # Calculate dot product
+  dot.product <- sum(vector1 * vector2)
+  
+  # Calculate magnitudes
+  magnitude1 <- sqrt(sum(vector1^2))
+  magnitude2 <- sqrt(sum(vector2^2))
+  
+  # Avoid division by zero
+  if (magnitude1 == 0 || magnitude2 == 0) return(0)
+  
+  # Calculate cosine similarity
+  similarity <- dot.product / (magnitude1 * magnitude2)
+  
   return(similarity)
 }
 ```
 
 ```{r}
-predict.rating.ubcf <- function(user.id, isbn, k = 10) {
-  # Find k most similar users
-  neighbors <- comb.ratings[comb.ratings$User.ID != user.id, ]
-  similarities <- sapply(neighbors$User.ID, function(x) cosine.similarity(user.id, x))
-  nearest.neighbors <- neighbors[order(similarities, decreasing = TRUE)[1:k], ]
+predict.rating.ubcf <- function(user.id, isbn, r.matrix, k = 10) {
+  user.id <- as.character(user.id)
+  isbn <- as.character(isbn)
   
-  # Calculate weighted average rating from neighbors
-  weighted.ratings <- nearest.neighbors$Book.Rating * similarities[order(similarities, decreasing = TRUE)[1:k]]
-  predicted.rating <- sum(weighted.ratings) / sum(similarities[order(similarities, decreasing = TRUE)[1:k]])
+  if (!(isbn %in% colnames(r.matrix))) return(NA)
+  if (!(user.id %in% rownames(r.matrix))) return(NA)
+  
+  user.ratings <- r.matrix[user.id, ]
+  other.users <- r.matrix[rownames(r.matrix) != user.id, ]
+  
+  similarities <- apply(other.users, 1, function(x) cosine.similarity(user.ratings, x))
+  nearest.neighbors <- head(sort(similarities, decreasing = TRUE), k)
+  
+  if (all(is.na(nearest.neighbors))) return(0)
+  
+  weighted.ratings <- nearest.neighbors * r.matrix[names(nearest.neighbors), isbn]
+  predicted.rating <- sum(weighted.ratings, na.rm = TRUE) / sum(nearest.neighbors[!is.na(weighted.ratings)])
+  
+  if (is.na(predicted.rating)) return(0)
   
   return(predicted.rating)
 }
 ```
 
 ## Item-Based Collaborative Filtering
-We will now build an item-based collaborative filtering system. We will first create an item-user matrix then calculate the cosine similarity between items. We will then use the similarity matrix to predict the ratings for the books.
-
-First, we need a cosine similarity function for items.
+We will now build an item-based collaborative filtering system by calculating the cosine similarity between items. We will then use the similarity matrix to predict the ratings for the books.
 ```{r}
-cosine.similarity.items <- function(item1, item2) {
-  max.len <- max(length(item1), length(item2))
-  item1.padded <- c(item1, rep(0, max.len - length(item1)))
-  item2.padded <- c(item2, rep(0, max.len - length(item2)))
-  similarity <- sum(item1.padded * item2.padded) / (sqrt(sum(item1.padded^2)) * sqrt(sum(item2.padded^2)))
-  return(similarity)
-}
-```
-
-Next, we need a function to predict the ratings for items.
-```{r}
-predict.rating.ibcf <- function(user.id, isbn, k = 10) {
-  # Find k most similar items
-  neighbors <- comb.ratings[comb.ratings$ISBN != isbn, ]
-  similarities <- sapply(neighbors$ISBN, function(x) cosine.similarity.items(comb.ratings[comb.ratings$ISBN == isbn, ]$Book.Rating, comb.ratings[comb.ratings$ISBN == x, ]$Book.Rating))
-  nearest.neighbors <- neighbors[order(similarities, decreasing = TRUE)[1:k], ]
+predict.rating.ibcf <- function(user.id, isbn, r.matrix, k = 10) {
+  user.id <- as.character(user.id)
+  isbn <- as.character(isbn)
   
-  # Calculate weighted average rating from neighbors
-  weighted.ratings <- nearest.neighbors$Book.Rating * similarities[order(similarities, decreasing = TRUE)[1:k]]
-  predicted.rating <- sum(weighted.ratings) / sum(similarities[order(similarities, decreasing = TRUE)[1:k]])
+  if (!(user.id %in% rownames(r.matrix))) return(NA)
+  if (!(isbn %in% colnames(r.matrix))) return(NA)
+  
+  user.ratings <- r.matrix[user.id, ]
+  other.items <- r.matrix[, colnames(r.matrix) != isbn]
+  
+  similarities <- apply(other.items, 2, function(x) cosine.similarity(r.matrix[, isbn], x))
+  nearest.neighbors <- head(sort(similarities, decreasing = TRUE), k)
+  
+  if (all(is.na(nearest.neighbors))) return(0)
+  
+  weighted.ratings <- nearest.neighbors * user.ratings[names(nearest.neighbors)]
+  predicted.rating <- sum(weighted.ratings, na.rm = TRUE) / sum(nearest.neighbors[!is.na(weighted.ratings)])
+  
+  if (is.na(predicted.rating)) return(0)
   
   return(predicted.rating)
 }
@@ -255,8 +297,12 @@ rs$train(reco.train, opts = opts)
 
 Let's do some predictions
 ```{r}
-predict.rating.ubcf(59494, 616)
-predict.rating.ibcf(59494, 616)
+# Create ratings matrix
+ratings.matrix <- create.ratings.matrix(comb.ratings)
+
+# Predictions
+predict.rating.ubcf(59494, 616, ratings.matrix)
+predict.rating.ibcf(59494, 616, ratings.matrix)
 mf.predict <- rs$predict(reco.test)
 ```
 
@@ -283,19 +329,23 @@ sqrt(mean((mf.predict - test.data$Book.Rating)^2))
 
 We will now create an ensemble model that combines the user-based collaborative filtering, item-based collaborative filtering, and matrix factorisation models. We will then evaluate the accuracy of the ensemble model using RMSE.
 ```{r}
-ensemble.predict <- function(user.id, isbn) {
-  ubcf.prediction <- predict.rating.ubcf(user.id, isbn)
-  ibcf.prediction <- predict.rating.ibcf(user.id, isbn)
+ensemble.predict <- function(user.id, isbn, r.matrix = ratings.matrix) {
+  ubcf.prediction <- predict.rating.ubcf(user.id, isbn, r.matrix)
+  ibcf.prediction <- predict.rating.ibcf(user.id, isbn, r.matrix)
   mf.prediction <- rs$predict(data_memory(user_index = user.id, item_index = isbn))
   
   return((ubcf.prediction + ibcf.prediction + mf.prediction) / 3)
 }
 ```
 
+Test the ensemble model
 ```{r}
-ensemble.predict(59494, 616)
+ensemble.predict(80, 433)
+```
 
-# ensemble.predictions <- mapply(ensemble.predict, test.data$User.ID[1:10], test.data$ISBN[1:10])
-# sqrt(mean((ensemble.predictions - test.data$Book.Rating[1:10])^2))
+Evaluate the accuracy of the ensemble model using RMSE.
+```{r}
+ensemble.predictions <- mapply(ensemble.predict, test.data$User.ID, test.data$ISBN)
+sqrt(mean((ensemble.predictions - test.data$Book.Rating)^2))
 ```
 
