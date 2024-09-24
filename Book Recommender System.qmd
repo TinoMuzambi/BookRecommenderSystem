@@ -22,6 +22,7 @@ install.if.missing <- function(package.name) {
 }
 
 install.if.missing("tidyverse")
+install.if.missing("recosystem")
 ```
 
 # The Data
@@ -41,13 +42,23 @@ head(users)
 
 # Data Pre-processing
 
-We will merge the data into a single dataframe then perform various functions to reduce the number of observations for computational efficiency. We will also perform some data cleaning.
+We will merge the data into a single dataframe then perform various functions to reduce the number of observations for computational efficiency. We will also perform some data cleaning. We will also recode the user and item IDs to be sequential integers starting from 0 for recosystem later.
 ```{r}
 # Merge the data
 comb.ratings <- ratings %>% 
   left_join(books, by = "ISBN") %>% 
   left_join(users, by = "User.ID")
 rm(ratings, books, users)
+
+# Recode the user and item IDs
+user.ids <- data.frame(User.ID = unique(comb.ratings$User.ID), new.user.id = 0:(length(unique(comb.ratings$User.ID)) - 1))
+book.ids <- data.frame(ISBN = unique(comb.ratings$ISBN), new.book.id = 0:(length(unique(comb.ratings$ISBN)) - 1))
+
+# Update the user and item IDs
+comb.ratings <- comb.ratings %>% 
+  left_join(user.ids) %>% 
+  left_join(book.ids) %>% 
+  select(User.ID = new.user.id, ISBN = new.book.id, Book.Rating, Year.Of.Publication, Age)
 ```
 
 Explore the structure of the combined data.
@@ -73,7 +84,6 @@ Looking at the data, we identify some cleaning that needs to be done. We will do
 ```{r}
 # Perform data cleaning
 comb.ratings <- comb.ratings %>% 
-  select(c("User.ID", "ISBN", "Book.Rating", "Year.Of.Publication", "Age")) %>% 
   mutate(Age = ifelse(Age < 13 | Age > 100, NA, Age)) %>% 
   mutate(Year.Of.Publication = ifelse(Year.Of.Publication < 1900, NA, Year.Of.Publication)) %>% 
   mutate(Year.Of.Publication = as.numeric(Year.Of.Publication)) %>% 
@@ -111,7 +121,7 @@ comb.ratings %>%
   theme_minimal() + 
   theme(plot.title = element_text(hjust = 0.5))
 ```
-We observe a large number of zero ratings. This can be attributed to the fact that a majority of the users posting reviews are doing so because they had a bad experience. Alternatively the users, or the site the data is derived from, could be configured to automatically input a 0 for the book rating. Before building the recommendation system, we will only keep the columns we need for the analysis. We will also then take a sample of 50 000 ratings for computational efficiency.
+We observe a large number of zero ratings. This can be attributed to the fact that a majority of the users posting reviews are doing so because they had a bad experience. Alternatively the users, or the site the data is derived from, could be configured to automatically input a 0 for the book rating. Before building the recommendation system, we will only keep the columns we need for the analysis. We will also then take a sample of 35 000 ratings for computational efficiency.
 ```{r}
 comb.ratings <- preprocess.data(comb.ratings)
 
@@ -185,32 +195,16 @@ predict.rating.ibcf <- function(user.id, isbn, k = 10) {
 ```
 
 ## Matrix Factorisation
-We will now build a matrix factorisation system. We will first create a user-item matrix then factorise the matrix using singular value decomposition. We will then use the factorised matrix to predict the ratings for the books.
+We will now build a matrix factorisation system using recosystem. 
 ```{r}
-predict.rating.mf <- function(user.id, isbn) {
-  # Create user-item matrix
-  user.item.matrix <- comb.ratings %>% 
-    spread(key = ISBN, value = Book.Rating) %>% 
-    column_to_rownames(var = "User.ID")
-  
-  # Factorise the matrix
-  svd.matrix <- svd(user.item.matrix)
-  u <- svd.matrix$u
-  d <- diag(svd.matrix$d)
-  v <- svd.matrix$v
-  
-  # Predict the rating
-  predicted.rating <- u[user.id, ] %*% d %*% v[, isbn]
-  
-  return(predicted.rating)
-}
+
 ```
 
 Let's do some predictions
 ```{r}
-predict.rating.ubcf(155141, "059035342X")
-predict.rating.ibcf(155141, "059035342X")
-predict.rating.mf(155141, "059035342X")
+predict.rating.ubcf(59494, "059035342X")
+predict.rating.ibcf(59494, "059035342X")
+predict.rating.mf(59494, "059035342X")
 ```
 
 
