@@ -59,6 +59,9 @@ comb.ratings <- comb.ratings %>%
   left_join(user.ids) %>% 
   left_join(book.ids) %>% 
   select(User.ID = new.user.id, ISBN = new.book.id, Book.Rating, Year.Of.Publication, Age, Book.Title)
+
+rm(book.ids)
+rm(user.ids)
 ```
 
 Explore the structure of the combined data.
@@ -261,5 +264,24 @@ We will now evaluate the accuracy of the matrix factorisation model using RMSE.
 ```{r}
 # Calculate RMSE
 sqrt(mean((mf.predict - test.data$Book.Rating)^2))
+```
+
+We will now create an ensemble model that combines the user-based collaborative filtering, item-based collaborative filtering, and matrix factorisation models. We will then evaluate the accuracy of the ensemble model using RMSE.
+```{r}
+ensemble.predict <- function(user.id, isbn) {
+  browser()
+  ubcf.prediction <- predict.rating.ubcf(user.id, isbn)
+  ibcf.prediction <- predict.rating.ibcf(user.id, isbn)
+  mf.prediction <- rs$predict(data_memory(user_index = user.id, item_index = isbn))
+  
+  return((ubcf.prediction + ibcf.prediction + mf.prediction) / 3)
+}
+```
+
+```{r}
+ensemble.predict(59494, 616)
+
+ensemble.predictions <- mapply(ensemble.predict, test.data$User.ID[1:10], test.data$ISBN[1:10])
+sqrt(mean((ensemble.predictions - test.data$Book.Rating[1:10])^2))
 ```
 
