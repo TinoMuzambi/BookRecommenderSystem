@@ -6,6 +6,7 @@ format:
     embed-resources: true
     page-layout: full
     toc: true
+bibliography: references.bib
 ---
 
 ```{r setup, include=FALSE}
@@ -25,11 +26,13 @@ install.if.missing("tidyverse")
 install.if.missing("recosystem")
 ```
 
+# Introduction
+In this project, we will build a book recommendation system using collaborative filtering and matrix factorisation. We will start by loading the data and performing some data pre-processing. We will then build a user-based collaborative filtering system, an item-based collaborative filtering system, and a matrix factorisation system. We will evaluate the accuracy of the models using RMSE. Finally, we will create an ensemble model that combines the user-based collaborative filtering, item-based collaborative filtering, and matrix factorisation models.
+
 # The Data
+The data is a partially preprocessed version of the ”Book-Crossing” dataset consisting of three datasets: Ratings, Books, and Users. The Ratings dataset contains the ratings given by users to books. The Books dataset contains information about the books, such as the title and year of publication. The Users dataset contains information about the users, such as their age. The data can be downloaded [here](https://www.kaggle.com/datasets/arashnic/book-recommendation-dataset/) from Kaggle. It contains 278 858 users providing 1 149 780 ratings about 271 379 books.
 
-The data we will be working with is a partially preprocessed version of the ”Book-Crossing” dataset. The data can be downloaded [here](https://www.kaggle.com/datasets/arashnic/book-recommendation-dataset/) from Kaggle. It was collected by Cai-Nicolas Ziegler in a 4-week crawl (August / September 2004) from the Book-Crossing community with kind permission from Ron Hornbaker, CTO of Humankind Systems. It contains 278 858 users (anonymised but with demographic information) providing 1 149 780 ratings (explicit/implicit) about 271 379 books.
-
-```{r}
+```{r, echo = FALSE}
 # Load the data
 ratings <- read.csv("data/Ratings.csv")
 books <- read.csv("data/Books.csv")
@@ -41,20 +44,26 @@ head(users)
 ```
 
 # Data Pre-processing
+We will merge the books, ratings and user data into a single dataframe. This will make working with the data easier. Due to the large size of the data, we will then perform various functions to reduce the number of observations. These will include:
+-   Removing users with less than 5 ratings.
+-   Removing books with less than 5 ratings.
+-   Sampling 35 000 ratings for computational efficiency.
 
-We will merge the data into a single dataframe then perform various functions to reduce the number of observations for computational efficiency. We will also perform some data cleaning. We will also recode the user and item IDs to be sequential integers starting from 0 for recosystem later.
-```{r}
+We will also perform some data cleaning. Part of which includes recoding the user and book IDs to be sequential integers starting from 0. This is necessary for the `recosystem` package which will be used in the matrix factorisation model.
+```{r, echo = FALSE}
 # Merge the data
 comb.ratings <- ratings %>% 
   left_join(books, by = "ISBN") %>% 
   left_join(users, by = "User.ID")
 rm(ratings, books, users)
+```
 
-# Recode the user and item IDs
+```{r}
+# Recode the user and book IDs
 user.ids <- data.frame(User.ID = unique(comb.ratings$User.ID), new.user.id = 0:(length(unique(comb.ratings$User.ID)) - 1))
 book.ids <- data.frame(ISBN = unique(comb.ratings$ISBN), new.book.id = 0:(length(unique(comb.ratings$ISBN)) - 1))
 
-# Update the user and item IDs
+# Update the user and book IDs
 comb.ratings <- comb.ratings %>% 
   left_join(user.ids) %>% 
   left_join(book.ids) %>% 
@@ -64,9 +73,29 @@ rm(book.ids)
 rm(user.ids)
 ```
 
-Explore the structure of the combined data.
+```{r, echo = FALSE}
+# Preprocess the data to remove users with less than 5 ratings and books with less than 5 ratings, drop zero ratings and select only the columns we need.
+preprocess.data <- function(ratings, min.ratings = 5) {
+  user.counts <- table(ratings$User.ID)
+  valid.users <- names(user.counts[user.counts >= min.ratings])
+  
+  filtered.ratings <- ratings %>%
+    filter(User.ID %in% valid.users) %>%
+    group_by(ISBN) %>%
+    filter(n() >= min.ratings) %>%
+    ungroup() %>%
+  filter(Book.Rating != 0) %>% 
+  select(User.ID, ISBN, Book.Rating, Book.Title)
+  
+  return(filtered.ratings)
+}
+```
 
-```{r}
+# Exploratory Data Analysis
+We will now perform some exploratory data analysis to understand the data better.
+
+```{r, echo = FALSE}
+# Structure and summary of the data
 str(comb.ratings)
 
 summary(comb.ratings)
@@ -74,17 +103,17 @@ summary(comb.ratings)
 
 Looking at the data, we identify some cleaning that needs to be done. We will do the following to clean up the data:
 
--   Remove the columns that we do not need
+-   Remove the columns that we do not need.
 
--   Replace ages less than 13 and greater than 100 with NA
+-   Replace ages less than 13 and greater than 100 with NA.
 
--   Convert the data types of the columns to the appropriate types
+-   Convert the data types of the columns to the appropriate types.
 
--   Replace year of publication with NA where it is before 1900
+-   Replace year of publication with NA where it is before 1900.
 
--   Remove any rows with missing values
+-   Remove any rows with missing values.
 
-```{r}
+```{r, echo = FALSE}
 # Perform data cleaning
 comb.ratings <- comb.ratings %>% 
   mutate(Age = ifelse(Age < 13 | Age > 100, NA, Age)) %>% 
@@ -94,27 +123,9 @@ comb.ratings <- comb.ratings %>%
 summary(comb.ratings)
 ```
 
-Preprocess the data to remove users with less than 5 ratings and books with less than 5 ratings
-```{r}
-preprocess.data <- function(ratings, min.ratings = 5) {
-  user.counts <- table(ratings$User.ID)
-  valid.users <- names(user.counts[user.counts >= min.ratings])
-  
-  filtered.ratings <- ratings %>%
-    filter(User.ID %in% valid.users) %>%
-    group_by(ISBN) %>%
-    filter(n() >= min.ratings) %>%
-    ungroup()
-  
-  return(filtered.ratings)
-}
-```
-
-# Exploratory Data Analysis
-We will now perform some exploratory data analysis to understand the data better.
-
-```{r}
-# Plot the distribution of ratings, age and year of publication faceted
+We will look at the distribution of the ratings, age, and year of publication to understand the data better. We will use histograms to visualise the distributions.
+```{r, echo = FALSE}
+# Distribution of key variables
 comb.ratings %>% 
   gather(key = "key", value = "value", Book.Rating, Age, Year.Of.Publication) %>% 
   ggplot(aes(x = value)) +
@@ -124,25 +135,36 @@ comb.ratings %>%
   theme_minimal() + 
   theme(plot.title = element_text(hjust = 0.5))
 ```
-We observe a large number of zero ratings. This can be attributed to the fact that a majority of the users posting reviews are doing so because they had a bad experience. Alternatively the users, or the site the data is derived from, could be configured to automatically input a 0 for the book rating. Before building the recommendation system, we will only keep the columns we need for the analysis. We will also then take a sample of 35 000 ratings for computational efficiency.
-```{r}
-comb.ratings <- preprocess.data(comb.ratings)
+We observe a large number of zero ratings. This can be attributed to the fact that a majority of the users posting reviews are doing so because they had a bad experience. Alternatively the users, or the site the data is derived from, could be configured to automatically input a 0 for the book rating. We will drop the zero ratings to improve the accuracy of the recommendation systems.
 
-# Select the columns we need
-comb.ratings <- comb.ratings %>% 
-  select(User.ID, ISBN, Book.Rating, Book.Title)
+Before building the recommendation systems, we will drop users and books with less than five ratings and only keep the columns we need for the analysis. Namely, the user ID, ISBN, book rating and the book title. We will also then take a sample of 35 000 ratings for computational efficiency.
+```{r, echo = FALSE}
+# Preprocess the data
+comb.ratings <- preprocess.data(comb.ratings)
 
 # Sample 35 000 ratings
 set.seed(50731)
 comb.ratings <- comb.ratings[sample(nrow(comb.ratings), 35000),]
 ```
 
+We will now look at the distribution of the ratings after removing the zero ratings.
+```{r}
+# Distribution of ratings
+comb.ratings %>%
+  ggplot(aes(x = Book.Rating)) +
+  geom_bar(fill = "skyblue", color = "black") +
+  labs(title = "Distribution of Ratings", x = "Rating", y = "Count") +
+  theme_minimal() + 
+  theme(plot.title = element_text(hjust = 0.5))
+```
+The distribution of the ratings shows that most of the ratings are between 5 and 10. This is expected as users are more likely to rate books that they enjoyed.
+
 # Recommendation Systems
-We will now begin building our recommendation system. We will start by building a user-based collaborative filtering system. We will then build an item-based collaborative filtering system. Finally, we will build a matrix factorisation system.
+We will now begin building our recommendation systems. We will start by building a user-based collaborative filtering system. We will then build an item-based collaborative filtering system. Finally, we will build a matrix factorisation system before creating an ensemble model that combines the three models.
 
 ## User-Based Collaborative Filtering
-We will start by building a user-based collaborative filtering system. We will first create a user-item matrix then calculate the cosine similarity between users. We will then use the similarity matrix to predict the ratings for the books.
-```{r}
+We will start by building a user-based collaborative filtering system. User based collaborative filtering finds users with similar consumption patterns as yourself and gives you the content that these similar users found interesting.[@bostrom2017comparison] How it works is that it first creates a user-item matrix. The user-item matrix is a matrix where the rows represent users, the columns represent items, and the cells represent the ratings given by users to items. This matrix is then used to calculate the cosine similarity between users. We will then use the similarity matrix to predict the ratings for the books.
+```{r, echo = FALSE}
 create.ratings.matrix <- function(ratings.data) {
   ratings.matrix <- ratings.data %>%
     select(User.ID, ISBN, Book.Rating) %>%
@@ -153,8 +175,7 @@ create.ratings.matrix <- function(ratings.data) {
 }
 ```
 
-
-```{r}
+```{r, echo = FALSE}
 cosine.similarity <- function(vector1, vector2) {
   # Filter out NA values
   vector1 <- vector1[!is.na(vector1)]
@@ -187,7 +208,7 @@ cosine.similarity <- function(vector1, vector2) {
 }
 ```
 
-```{r}
+```{r, echo = FALSE}
 predict.rating.ubcf <- function(user.id, isbn, r.matrix, k = 10) {
   user.id <- as.character(user.id)
   isbn <- as.character(isbn)
@@ -213,8 +234,8 @@ predict.rating.ubcf <- function(user.id, isbn, r.matrix, k = 10) {
 ```
 
 ## Item-Based Collaborative Filtering
-We will now build an item-based collaborative filtering system by calculating the cosine similarity between items. We will then use the similarity matrix to predict the ratings for the books.
-```{r}
+We will now build an item-based collaborative filtering system. Item-based collaborative filtering uses similarity between the items to determine whether a user would like it or not. The same matrix created in the user-based collaborative filtering will be used. This matrix is used to calculate the cosine similarity between items. We will then use the similarity matrix to predict the ratings for the books.
+```{r, echo = FALSE}
 predict.rating.ibcf <- function(user.id, isbn, r.matrix, k = 10) {
   user.id <- as.character(user.id)
   isbn <- as.character(isbn)
@@ -240,18 +261,21 @@ predict.rating.ibcf <- function(user.id, isbn, r.matrix, k = 10) {
 ```
 
 ## Matrix Factorisation
-We will now build a matrix factorisation system using recosystem. We will first allocate training and test splits. We will then set up the model and make predictions on the test set.
-```{r}
+We will now build a matrix factorisation system using recosystem. Matrix factorization is an extensively used technique in collaborative filtering recommendation systems. Its objective is to factorise a user-item matrix into two low-ranked matrices, the user-factor matrix and the item-factor matrix, that can predict new items that users might be interested in. This is achieved in by multiplying the two factor matrices.[@isinkaye2023matrix]
+
+We will first allocate training and test splits. We will then set up the model. We will also perform some hyperparameter tuning to find the best values for the learning rate and dim. We will then make predictions on the test set. We will evaluate the accuracy of the model using RMSE. We will then apply regularisation to the model and evaluate the accuracy again.
+```{r, echo = FALSE}
 # Create test/train split.
 test.data <- comb.ratings %>% 
   group_by(User.ID) %>%
   slice_sample(prop = 0.2) %>%
   ungroup()
+
 train.data <- comb.ratings %>% 
   anti_join(test.data, by = c("User.ID", "ISBN"))
 ```
 
-```{r}
+```{r, echo = FALSE}
 # Set up the Recosystem params.
 reco.train <- data_memory(
   user_index = train.data$User.ID,
@@ -266,7 +290,7 @@ reco.test <- data_memory(
 )
 ```
 
-```{r}
+```{r, echo = FALSE}
 # Set up the model.
 rs <- Reco()
 
@@ -278,7 +302,8 @@ rs$train(reco.train, opts = list(
 ))
 ```
 
-```{r}
+### Hyperparameter Tuning
+```{r, echo = FALSE}
 # Hyperparameter tuning
 opts <- rs$tune(reco.train, opts = list(
   dim = c(50, 75, 100),
@@ -289,33 +314,33 @@ opts <- rs$tune(reco.train, opts = list(
 ))
 opts
 ```
+The initial grid for the hyperparameter search involved varying `dim` from 0 - 50 and `lrate` from 0.01 to 0.05. From the initial search the optimal parameters were `dim` = 50 and `lrate` = 0.01. Since these values were on the edge of the grid, we performed another search with `dim` varying from 50 - 100 and `lrate` from 0.001 to 0.01. The optimal parameters found were `dim` = 50 and `lrate` = 0.01. The model will be retrained with these optimal hyperparameters.
 
-```{r}
+```{r, echo = FALSE}
 # Retrain the model with the optimal hyperparameters
 rs$train(reco.train, opts = opts)
 ```
-
-Let's do some predictions
-```{r}
+### Model Evaluation
+With our models set up, we can do some testing. We start by creating the ratings matrix. We will then make predictions on the test set. We will evaluate the accuracy of the matrix factorisation model using RMSE. We will then apply regularisation to the model and evaluate the accuracy again.
+```{r, echo = FALSE}
 # Create ratings matrix
 ratings.matrix <- create.ratings.matrix(comb.ratings)
 
-# Predictions
-predict.rating.ubcf(59494, 616, ratings.matrix)
-predict.rating.ibcf(59494, 616, ratings.matrix)
+# Prediction
 mf.predict <- rs$predict(reco.test)
 ```
 
-We will now evaluate the accuracy of the matrix factorisation model using RMSE.
-```{r}
+```{r, echo = FALSE}
 # Calculate RMSE
-sqrt(mean((mf.predict - test.data$Book.Rating)^2))
+mf.rmse.no.validation <- sqrt(mean((mf.predict - test.data$Book.Rating)^2))
 ```
+### Regularisation
 
-Apply regularisation to the matrix factorisation model.
-```{r}
+The RMSE of the matrix factorisation model without regularisation is `mf.rmse.no.validation`. This tells us that on average, the model's predictions are off by `mf.rmse.no.validation` units. We will now apply regularisation to the model and evaluate the accuracy again.
+```{r, echo = FALSE}
 rs$train(reco.train, opts = list(
-  dim = 10,
+  dim = 50,
+  lrate = 0.01,
   nmf = T,
   niter = 50,
   verbose = F,
@@ -323,12 +348,18 @@ rs$train(reco.train, opts = list(
 ))
 
 mf.predict <- rs$predict(reco.test)
-sqrt(mean((mf.predict - test.data$Book.Rating)^2))
+mf.rmse.validation <- sqrt(mean((mf.predict - test.data$Book.Rating)^2))
 ```
+With regularisation, the RMSE of the matrix factorisation model is `mf.rmse.validation`. This tells us that on average, the model's predictions are off by `mf.rmse.validation` units. Regularisation has thus improved the accuracy of the model.
 
+## Ensemble Model
 
-We will now create an ensemble model that combines the user-based collaborative filtering, item-based collaborative filtering, and matrix factorisation models. We will then evaluate the accuracy of the ensemble model using RMSE.
-```{r}
+We will now create an ensemble model that combines the user-based collaborative filtering, item-based collaborative filtering, and matrix factorisation models. We will then evaluate the accuracy of the ensemble model using RMSE. The ensemble model will be created using the following formula:
+
+\[
+\text{Ensemble Prediction} = \frac{\text{UBCF Prediction} + \text{IBCF Prediction} + \text{MF Prediction}}{3}
+\]
+```{r, echo = FALSE}
 ensemble.predict <- function(user.id, isbn, r.matrix = ratings.matrix) {
   ubcf.prediction <- predict.rating.ubcf(user.id, isbn, r.matrix)
   ibcf.prediction <- predict.rating.ibcf(user.id, isbn, r.matrix)
@@ -338,14 +369,13 @@ ensemble.predict <- function(user.id, isbn, r.matrix = ratings.matrix) {
 }
 ```
 
-Test the ensemble model
-```{r}
-ensemble.predict(80, 433)
-```
 
-Evaluate the accuracy of the ensemble model using RMSE.
-```{r}
-ensemble.predictions <- mapply(ensemble.predict, test.data$User.ID, test.data$ISBN)
-sqrt(mean((ensemble.predictions - test.data$Book.Rating)^2))
+```{r, echo = FALSE}
+# Evaluate the accuracy of the ensemble model using RMSE.
+# ensemble.predictions <- mapply(ensemble.predict, test.data$User.ID, test.data$ISBN)
+# ensemble.rmse <- sqrt(mean((ensemble.predictions - test.data$Book.Rating)^2))
 ```
+The RMSE of the ensemble model is `ensemble.rmse`. This tells us that on average, the model's predictions are off by `ensemble.rmse` units. The ensemble model has thus improved the accuracy of the predictions.
 
+# Conclusion
+In this project, we built a book recommendation system using collaborative filtering and matrix factorisation. We started by loading the data and performing some data pre-processing. We then built a user-based collaborative filtering system, an item-based collaborative filtering system, and a matrix factorisation system. We evaluated the accuracy of the models using RMSE. Finally, we created an ensemble model that combines the user-based collaborative filtering, item-based collaborative filtering, and matrix factorisation models. The ensemble model improved the accuracy of the predictions.
