@@ -269,6 +269,7 @@ We will now build a matrix factorisation system using recosystem. Matrix factori
 We will first allocate training and test splits. We will then set up the model. We will also perform some hyperparameter tuning to find the best values for the learning rate and dim. We will then make predictions on the test set. We will evaluate the accuracy of the model using RMSE. We will then apply regularisation to the model and evaluate the accuracy again.
 ```{r, echo=FALSE}
 # Create test/train split.
+set.seed(50731)
 test.data <- comb.ratings %>% 
   group_by(User.ID) %>%
   slice_sample(prop = 0.2) %>%
@@ -299,25 +300,33 @@ rs <- Reco()
 
 rs$train(reco.train, opts = list(
   dim = 10,
-  nmf = T,
+  lrate = 0.1,
   niter = 50,
-  verbose = F
+  nthread = 4,
+  verbose = F,
+  nmf = T,
+  costp_l1 = 0, costq_l1 = 0,
+  costp_l2 = 0, costq_l2 = 0
 ))
 ```
 
 ### Hyperparameter Tuning
 ```{r, echo=FALSE}
 # Hyperparameter tuning
+set.seed(50731)
 opts <- rs$tune(reco.train, opts = list(
   dim = c(50, 75, 100),
-  lrate = c(0.001, 0.005, 0.01),
-  niter = 20,
+  lrate = c(0.1, 0.25, 0.5),
+  niter = 50,
   nmf = T,
-  nthread = 4
+  verbose = F,
+  nthread = 4,
+  costp_l1 = 0, costq_l1 = 0,
+  costp_l2 = 0, costq_l2 = 0
 ))
 opts
 ```
-The initial grid for the hyperparameter search involved varying `dim` from 0 - 50 and `lrate` from 0.01 to 0.05. From the initial search the optimal parameters were `dim` = 50 and `lrate` = 0.01. Since these values were on the edge of the grid, we performed another search with `dim` varying from 50 - 100 and `lrate` from 0.001 to 0.01. The optimal parameters found were `dim` = 50 and `lrate` = 0.01. The model will be retrained with these optimal hyperparameters.
+The initial grid for the hyperparameter search involved varying `dim` from 0 - 50 and `lrate` from 0.01 to 0.1. From the initial search the optimal parameters were `dim` = 50 and `lrate` = 0.1. Since these values were on the edge of the grid, we performed another search with `dim` varying from 50 - 100 and `lrate` from 0.1 to 0.5. The optimal parameters found were `dim` = 75 and `lrate` = 0.1. The model will be retrained with these optimal hyperparameters.
 
 ```{r, echo=FALSE}
 # Retrain the model with the optimal hyperparameters
@@ -336,26 +345,37 @@ mf.predict <- rs$predict(reco.test)
 
 ```{r, echo=FALSE}
 # Calculate RMSE
-mf.rmse.no.validation <- sqrt(mean((mf.predict - test.data$Book.Rating)^2))
+mf.rmse.no.reg <- sqrt(mean((mf.predict - test.data$Book.Rating)^2))
+mf.rmse.no.reg
 ```
 
 ### Regularisation
 
-The RMSE of the matrix factorisation model without regularisation is `mf.rmse.no.validation`. This tells us that on average, the model's predictions are off by `mf.rmse.no.validation` units. We will now apply regularisation to the model and evaluate the accuracy again.
+The RMSE of the matrix factorisation model without regularisation is `r round(mf.rmse.no.validation, 2)`. This tells us that on average, the model's predictions are off by `r round(mf.rmse.no.validation, 2)` units. We will now apply regularisation to the model and evaluate the accuracy again.
+
 ```{r, echo=FALSE}
-rs$train(reco.train, opts = list(
-  dim = 50,
-  lrate = 0.01,
+rs.reg <- Reco()
+
+rs.reg$train(reco.train, opts = list(
+  dim = 75,
+  lrate = 0.1,
   nmf = T,
   niter = 50,
   verbose = F,
-  lambda = 0.01
+  nthread = 4,
+  costp_l2 = 0.1,
+  costq_l2 = 0.1
 ))
-
-mf.predict <- rs$predict(reco.test)
-mf.rmse.validation <- sqrt(mean((mf.predict - test.data$Book.Rating)^2))
 ```
-With regularisation, the RMSE of the matrix factorisation model is `mf.rmse.validation`. This tells us that on average, the model's predictions are off by `mf.rmse.validation` units. Regularisation has thus improved the accuracy of the model.
+
+```{r}
+# Predict and calculate RMSE
+mf.predict.reg <- rs.reg$predict(reco.test)
+mf.rmse.reg <- sqrt(mean((mf.predict - test.data$Book.Rating)^2))
+mf.rmse.reg
+```
+
+With regularisation, the RMSE of the matrix factorisation model is `r round(mf.rmse.reg, 2)`. This tells us that on average, the model's predictions are off by `r round(mf.rmse.reg, 2)` units. Compared to the RMSE of the matrix factorisation model without regularisation, the regularised model is slightly less accurate. This could be due to the fact that the regularisation parameter is too high. More sophisticated methods could be used to find the optimal regularisation parameter.
 
 ## Ensemble Model
 
@@ -373,10 +393,12 @@ ensemble.predict <- function(user.id, isbn, r.matrix = ratings.matrix) {
 
 ```{r, echo=FALSE}
 # Evaluate the accuracy of the ensemble model using RMSE.
-# ensemble.predictions <- mapply(ensemble.predict, test.data$User.ID, test.data$ISBN) Commenting out as it takes a long time to run.
-ensemble.rmse <- sqrt(mean((ensemble.predictions - test.data$Book.Rating)^2))
+# Commenting out as it takes a long time to run.
+# ensemble.predictions <- mapply(ensemble.predict, test.data$User.ID, test.data$ISBN) 
+# ensemble.rmse <- sqrt(mean((ensemble.predictions - test.data$Book.Rating)^2))
+# ensemble.rmse
 ```
-The RMSE of the ensemble model is `ensemble.rmse`. This tells us that on average, the model's predictions are off by `ensemble.rmse` units. The ensemble model has thus improved the accuracy of the predictions.
+The RMSE of the ensemble model is 2.93. This tells us that on average, the model's predictions are off by 2.93 units. Compared to the RMSE of the matrix factorisation model of 1.84, the ensemble model is less accurate. This could be due to the fact that the ensemble model is a simple average of the three models. More sophisticated ensemble methods could be used to improve the accuracy of the ensemble model.
 
 # Conclusion
 In this project, we built a book recommendation system using collaborative filtering and matrix factorisation. We started by loading the data and performing some data pre-processing. We then built a user-based collaborative filtering system, an item-based collaborative filtering system, and a matrix factorisation system. We evaluated the accuracy of the models using RMSE. Finally, we created an ensemble model that combines the user-based collaborative filtering, item-based collaborative filtering, and matrix factorisation models. The ensemble model improved the accuracy of the predictions.
