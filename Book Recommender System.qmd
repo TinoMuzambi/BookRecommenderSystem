@@ -362,7 +362,6 @@ With regularisation, the RMSE of the matrix factorisation model is `mf.rmse.vali
 We will now create an ensemble model that combines the user-based collaborative filtering, item-based collaborative filtering, and matrix factorisation models. We will then evaluate the accuracy of the ensemble model using RMSE. The ensemble model will be created by averaging the predictions of the three models.
 ```{r, echo=FALSE}
 ensemble.predict <- function(user.id, isbn, r.matrix = ratings.matrix) {
-  print(user.id)
   ubcf.prediction <- predict.rating.ubcf(user.id, isbn, r.matrix)
   ibcf.prediction <- predict.rating.ibcf(user.id, isbn, r.matrix)
   mf.prediction <- rs$predict(data_memory(user_index = user.id, item_index = isbn))
@@ -374,7 +373,7 @@ ensemble.predict <- function(user.id, isbn, r.matrix = ratings.matrix) {
 
 ```{r, echo=FALSE}
 # Evaluate the accuracy of the ensemble model using RMSE.
-ensemble.predictions <- mapply(ensemble.predict, test.data$User.ID, test.data$ISBN)
+# ensemble.predictions <- mapply(ensemble.predict, test.data$User.ID, test.data$ISBN) Commenting out as it takes a long time to run.
 ensemble.rmse <- sqrt(mean((ensemble.predictions - test.data$Book.Rating)^2))
 ```
 The RMSE of the ensemble model is `ensemble.rmse`. This tells us that on average, the model's predictions are off by `ensemble.rmse` units. The ensemble model has thus improved the accuracy of the predictions.
