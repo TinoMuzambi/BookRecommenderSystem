@@ -1,7 +1,7 @@
 ---
 title: "Book Recommender System"
-subtitle: STA5073Z Assignment 1
-author: "Tinotenda Muzambi (MZMTIN002)"
+subtitle: "Collaborative filtering and matrix factorisation"
+author: "Tino Muzambi"
 format: 
   html:
     embed-resources: true

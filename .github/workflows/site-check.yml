@@ -1,0 +1,25 @@
+name: Site check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check published report
+        run: |
+          test -s index.html
+          grep -q "Book Recommender System" index.html
+          ! grep -qi "MZMTIN002" index.html "Book Recommender System.qmd" README.md
+      - name: Check repository hygiene
+        run: |
+          test -s README.md
+          test -s LICENSE
+          test ! -e Book-Recommender-System.pdf
